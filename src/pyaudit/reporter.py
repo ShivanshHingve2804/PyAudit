@@ -63,14 +63,14 @@ def print_summary(results: list) -> str:
     files_scanned = len(results)
 
     lines = []
-    lines.append(f"\n{BOLD}📊 Summary{RESET}")
+    lines.append(f"\n{BOLD} Summary{RESET}")
     lines.append(f"   Files scanned: {files_scanned}")
 
     if errors:
         lines.append(f"   Errors: {colorize(str(len(errors)), RED)}")
 
     if total == 0:
-        lines.append(f"   {colorize('✅ No issues found!', GREEN)}")
+        lines.append(f"   {colorize('No issues found!', GREEN)}")
     else:
         parts = []
         if high:
@@ -131,7 +131,7 @@ def _format_table(results: list) -> str:
         if not result.issues:
             continue
 
-        lines.append(f"\n{colorize('📁', WHITE)} {colorize(result.filepath, BOLD)}")
+        lines.append(f"\n{colorize('FILE', WHITE)} {colorize(result.filepath, BOLD)}")
         lines.append(colorize(separator, DIM))
 
         # Header
