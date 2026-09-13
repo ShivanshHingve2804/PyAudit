@@ -70,7 +70,7 @@ def print_summary(results: list) -> str:
         lines.append(f"   Errors: {colorize(str(len(errors)), RED)}")
 
     if total == 0:
-        lines.append(f"   {colorize('No issues found!', GREEN)}")
+        lines.append(f"   {colorize('No issues found! :)', GREEN)}")
     else:
         parts = []
         if high:
@@ -124,7 +124,7 @@ def _format_table(results: list) -> str:
 
     for result in results:
         if result.error:
-            lines.append(f"\n{colorize('⚠', YELLOW)}  {colorize(result.filepath, BOLD)}")
+            lines.append(f"\n{colorize('!', YELLOW)}  {colorize(result.filepath, BOLD)}")
             lines.append(f"   {colorize(result.error, RED)}")
             continue
 
