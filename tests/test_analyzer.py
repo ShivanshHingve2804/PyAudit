@@ -60,7 +60,7 @@ def test_analyze_path_single_file():
     try:
         results = analyze_path(path)
         assert len(results) == 1
-        assert results[0].filepath == path
+        assert os.path.realpath(results[0].filepath) == os.path.realpath(path)
     finally:
         os.unlink(path)
 
