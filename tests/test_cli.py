@@ -13,8 +13,9 @@ def _run_pyaudit(*args):
         cmd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=os.path.join(os.path.dirname(__file__), ".."),
-        env={**os.environ, "PYTHONPATH": os.path.join(os.path.dirname(__file__), "..", "src")},
+        env={**os.environ, "PYTHONPATH": os.path.join(os.path.dirname(__file__), "..", "src"), "PYTHONUTF8": "1"},
     )
     return result
 
