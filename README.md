@@ -69,8 +69,10 @@ Ideal for local development, pre-commit hooks, containerized workflows, and auto
 
 - 📊 **Flexible Reporting**
   - **Colorized Table**: Visual, formatted output with exact line and column coordinates for developer terminal sessions.
-  - **JSON Format**: Machine-parseable schema tailored for CI/CD integrations, SARIF converters, and metric dashboards.
+  - **JSON Format**: Machine-parseable schema with finding fingerprints for CI/CD integrations and baselines.
+  - **SARIF Format**: Native SARIF 2.1.0 output for code-scanning integrations.
   - **Summary Mode**: Concise issue counters aggregated by severity tier.
+  - **Baselines**: Suppress previously accepted findings and report only new issues.
 
 - 🐳 **Docker Support**
   - Multi-stage minimal container ready for zero-install pipeline execution.
@@ -117,11 +119,23 @@ pyaudit scan src/
 # Export results in structured JSON format
 pyaudit scan src/ --format json
 
-# Filter findings by severity (e.g., HIGH only)
+# Export SARIF for code-scanning platforms
+pyaudit scan src/ --format sarif > pyaudit.sarif
+
+# Filter findings by severity
 pyaudit scan src/ --severity high
 
 # Filter findings by category (bug, security, style)
 pyaudit scan src/ --category security
+
+# Ignore specific rules
+pyaudit scan src/ --ignore PA-C003,PA-B004
+
+# Create a baseline from current findings
+pyaudit scan src/ --write-baseline .pyaudit-baseline.json
+
+# Scan only for findings not already in the baseline
+pyaudit scan src/ --baseline .pyaudit-baseline.json
 
 # Display high-level summary only
 pyaudit scan src/ --format summary
@@ -130,19 +144,23 @@ pyaudit scan src/ --format summary
 ### Command-Line Arguments Reference
 
 ```text
-usage: pyaudit scan [-h] [-f {table,json,summary}] [-s {low,medium,high}]
-                    [-c {bug,security,style}] [--ignore RULES]
-                    targets [targets ...]
+usage: pyaudit scan [-h] [-f {table,json,summary,sarif}]
+                    [-s {high,medium,low,all}]
+                    [-c {bugs,security,style,all}] [--ignore RULES]
+                    [--baseline PATH | --write-baseline PATH]
+                    path
 
 positional arguments:
   targets               Files or directories to analyze
 
 options:
   -h, --help            Show this help message and exit
-  -f, --format FORMAT   Output format: table, json, summary (default: table)
-  -s, --severity LEVEL  Minimum severity threshold: low, medium, high (default: low)
-  -c, --category CAT    Filter by category: bug, security, style
+  -f, --format FORMAT   Output format: table, json, summary, sarif (default: table)
+  -s, --severity LEVEL  Filter by severity (default: all)
+  -c, --category CAT    Filter by category: bugs, security, style (default: all)
   --ignore RULES        Comma-separated list of rule IDs to skip (e.g. PA-C003,PA-B004)
+  --baseline PATH       Suppress findings already present in a JSON baseline
+  --write-baseline PATH Write current filtered findings to a JSON baseline and exit successfully
 ```
 
 ---
@@ -226,6 +244,23 @@ pytest --cov=pyaudit --cov-report=term-missing
 
 ---
 
+## 🧱 CI Baselines and SARIF
+
+A baseline is a JSON report containing fingerprints for accepted findings. It lets teams carry existing technical debt without failing CI for historical findings.
+
+```bash
+# Establish the current state
+pyaudit scan src/ --write-baseline .pyaudit-baseline.json
+
+# Future scans report only new findings
+pyaudit scan src/ --baseline .pyaudit-baseline.json
+
+# Generate SARIF
+pyaudit scan src/ --format sarif > pyaudit.sarif
+```
+
+Fingerprints combine the rule ID, normalized file path, source location, and finding message.
+
 ## 📁 Project Structure
 
 ```text
@@ -235,6 +270,7 @@ pyaudit/
 │       ├── __init__.py
 │       ├── cli.py
 │       ├── analyzer.py
+│       ├── baseline.py
 │       ├── models.py
 │       ├── reporter.py
 │       ├── utils.py
