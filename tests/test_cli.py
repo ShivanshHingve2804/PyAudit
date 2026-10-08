@@ -160,3 +160,21 @@ def test_scan_missing_baseline():
         assert "baseline" in result.stderr.lower()
     finally:
         os.unlink(path)
+
+
+def test_fingerprint_handles_cross_drive_paths(monkeypatch):
+    from pyaudit import baseline
+
+    def raise_cross_drive_error(path, start):
+        raise ValueError("path is on mount 'C:', start on mount 'D:'")
+
+    monkeypatch.setattr(baseline.os.path, "relpath", raise_cross_drive_error)
+
+    material = baseline._fingerprint_material(
+        "PA-S001",
+        os.path.join("outside", "file.py"),
+        1,
+        0,
+        "use of eval()",
+    )
+    assert os.path.normpath("outside" + os.sep + "file.py") in material
