@@ -78,3 +78,29 @@ def test_not_redefining_builtin(parse_code):
     tree = parse_code("my_list = []")
     issues = check(tree, "test.py")
     assert not any(i.rule_id == "PA-B007" for i in issues)
+
+
+def test_nested_function_local_variable_does_not_hide_outer_unused_variable(parse_code):
+    tree = parse_code(
+        "def outer():\n"
+        "    value = 1\n"
+        "    def inner():\n"
+        "        value = 2\n"
+        "        return value\n"
+        "    return 3\n"
+    )
+    issues = check(tree, "test.py")
+    matches = [i for i in issues if i.rule_id == "PA-B005" and "value" in i.message]
+    assert len(matches) == 1
+
+
+def test_nested_function_closure_counts_as_use(parse_code):
+    tree = parse_code(
+        "def outer():\n"
+        "    value = 1\n"
+        "    def inner():\n"
+        "        return value\n"
+        "    return 3\n"
+    )
+    issues = check(tree, "test.py")
+    assert not any(i.rule_id == "PA-B005" and "value" in i.message for i in issues)

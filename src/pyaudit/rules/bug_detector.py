@@ -11,6 +11,8 @@ Rules:
 """
 
 import ast
+from typing import Optional
+
 from pyaudit.models import Issue, Severity, Category
 
 # Built-in names that should not be shadowed
@@ -30,7 +32,7 @@ class BugDetector(ast.NodeVisitor):
     def __init__(self, filepath: str):
         self.filepath = filepath
         self.issues: list[Issue] = []
-        self._current_function: str | None = None
+        self._current_function: Optional[str] = None
         self._in_init = False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -181,38 +183,140 @@ class BugDetector(ast.NodeVisitor):
                 ))
 
     def _check_unused_vars(self, node: ast.FunctionDef) -> None:
-        """Basic unused variable detection within function scope."""
-        # Collect all assignments (Name targets in Assign nodes)
-        assigned = {}
-        for child in ast.walk(node):
-            if isinstance(child, ast.Assign):
-                for target in child.targets:
-                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
-                        assigned[target.id] = child
+        """Detect unused variables without mixing nested scopes."""
 
-        # Collect all Name loads (references)
-        referenced = set()
-        for child in ast.walk(node):
-            if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
-                referenced.add(child.id)
+        class ScopeUsageVisitor(ast.NodeVisitor):
+            """Collect assignments and references for one lexical scope."""
 
-        # Also count augmented assignments and function args as references
-        for child in ast.walk(node):
-            if isinstance(child, ast.AugAssign):
-                if isinstance(child.target, ast.Name):
-                    referenced.add(child.target.id)
+            def __init__(self):
+                self.assigned = {}
+                self.referenced = set()
+                self.global_names = set()
+                self.nonlocal_names = set()
 
-        # Exclude function arguments from unused detection
-        arg_names = set()
-        for arg in node.args.args + node.args.posonlyargs + node.args.kwonlyargs:
-            arg_names.add(arg.arg)
+            def visit_Name(self, current):
+                if isinstance(current.ctx, ast.Store):
+                    self.assigned[current.id] = current
+                elif isinstance(current.ctx, (ast.Load, ast.Del)):
+                    self.referenced.add(current.id)
+
+            def visit_Global(self, current):
+                self.global_names.update(current.names)
+
+            def visit_Nonlocal(self, current):
+                self.nonlocal_names.update(current.names)
+
+            def visit_FunctionDef(self, current):
+                self._visit_nested_scope(current)
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+
+            def visit_ClassDef(self, current):
+                self._visit_nested_scope(current)
+
+            def visit_Lambda(self, current):
+                for default in current.args.defaults:
+                    self.visit(default)
+                for default in current.args.kw_defaults:
+                    if default is not None:
+                        self.visit(default)
+
+                nested = ScopeUsageVisitor()
+                nested.visit(current.body)
+                self._merge_free_references(nested)
+
+            def visit_ListComp(self, current):
+                self._visit_nested_expression_scope(current)
+
+            def visit_SetComp(self, current):
+                self._visit_nested_expression_scope(current)
+
+            def visit_DictComp(self, current):
+                self._visit_nested_expression_scope(current)
+
+            def visit_GeneratorExp(self, current):
+                self._visit_nested_expression_scope(current)
+
+            def visit_AugAssign(self, current):
+                if isinstance(current.target, ast.Name):
+                    self.referenced.add(current.target.id)
+                else:
+                    self.visit(current.target)
+                self.visit(current.value)
+
+            def _visit_nested_scope(self, current):
+                # Decorators, bases, annotations, and defaults are evaluated
+                # in the surrounding scope, so they can reference outer names.
+                for decorator in current.decorator_list:
+                    self.visit(decorator)
+                for base in getattr(current, "bases", []):
+                    self.visit(base)
+                for keyword in getattr(current, "keywords", []):
+                    self.visit(keyword.value)
+                args = getattr(current, "args", None)
+                if args is not None:
+                    for default in args.defaults:
+                        self.visit(default)
+                    for default in args.kw_defaults:
+                        if default is not None:
+                            self.visit(default)
+
+                returns = getattr(current, "returns", None)
+                if returns is not None:
+                    self.visit(returns)
+
+                nested = ScopeUsageVisitor()
+                for statement in current.body:
+                    nested.visit(statement)
+                self._merge_free_references(nested)
+
+            def _visit_nested_expression_scope(self, current):
+                nested = ScopeUsageVisitor()
+                for generator in current.generators:
+                    nested.visit(generator.iter)
+                    nested.visit(generator.target)
+                    for condition in generator.ifs:
+                        nested.visit(condition)
+
+                if isinstance(current, ast.DictComp):
+                    nested.visit(current.key)
+                    nested.visit(current.value)
+                elif isinstance(current, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+                    nested.visit(current.elt)
+
+                self._merge_free_references(nested)
+
+            def _merge_free_references(self, nested):
+                free = (
+                    (nested.referenced - set(nested.assigned) - nested.global_names)
+                    | nested.nonlocal_names
+                )
+                self.referenced.update(free)
+
+        usage = ScopeUsageVisitor()
+        for statement in node.body:
+            usage.visit(statement)
+
+        # Exclude function arguments from unused detection.
+        arg_names = {
+            arg.arg
+            for arg in (
+                node.args.args
+                + node.args.posonlyargs
+                + node.args.kwonlyargs
+            )
+        }
         if node.args.vararg:
             arg_names.add(node.args.vararg.arg)
         if node.args.kwarg:
             arg_names.add(node.args.kwarg.arg)
 
-        for var_name, assign_node in assigned.items():
-            if var_name not in referenced and var_name not in arg_names:
+        for var_name, assign_node in usage.assigned.items():
+            if (
+                not var_name.startswith("_")
+                and var_name not in usage.referenced
+                and var_name not in arg_names
+            ):
                 self.issues.append(Issue(
                     rule_id="PA-B005",
                     message=f"Variable '{var_name}' is assigned but never used",
@@ -221,7 +325,7 @@ class BugDetector(ast.NodeVisitor):
                     col=assign_node.col_offset,
                     severity=Severity.MEDIUM,
                     category=Category.BUG,
-                    suggestion=f"Remove the unused variable or prefix with '_' to indicate intentional non-use"
+                    suggestion="Remove the unused variable or prefix with '_' to indicate intentional non-use",
                 ))
 
 
