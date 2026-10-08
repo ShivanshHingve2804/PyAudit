@@ -5,6 +5,7 @@ Supports four output formats: table (colored terminal), JSON, summary, and SARIF
 
 import json
 import os
+from typing import Optional, Set
 
 from pyaudit import __version__
 from pyaudit.baseline import issue_fingerprint
@@ -20,7 +21,7 @@ def format_results(
     fmt: str = "table",
     severity_filter: str = "all",
     category_filter: str = "all",
-    ignored_rules: list | None = None,
+    ignored_rules: Optional[list] = None,
 ) -> str:
     """Format analysis results into the specified output format.
 
@@ -101,7 +102,7 @@ def filter_results(
     results: list,
     severity_filter: str,
     category_filter: str,
-    ignored_rules: set[str] | None = None,
+    ignored_rules: Optional[Set[str]] = None,
 ) -> list:
     """Filter results by severity and/or category."""
     ignored_rules = ignored_rules or set()
