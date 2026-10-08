@@ -75,8 +75,7 @@ def test_normal_import():
 
 
 def test_returns_in_nested_function_are_not_counted():
-    nested_returns = "
-".join(["        return 1"] * 6)
+    nested_returns = "\n".join(["        return 1"] * 6)
     code = (
         "def outer():\n"
         "    def inner():\n"
