@@ -64,3 +64,15 @@ def test_scan_json_format():
 def test_scan_nonexistent_path():
     result = _run_pyaudit("scan", "/nonexistent/path.py")
     assert result.returncode != 0
+
+
+def test_scan_ignore_rule():
+    fd, path = tempfile.mkstemp(suffix=".py")
+    with os.fdopen(fd, "w") as f:
+        f.write("x = eval('1')\n")
+    try:
+        result = _run_pyaudit("scan", path, "--ignore", "PA-S001")
+        assert result.returncode == 0
+        assert "PA-S001" not in result.stdout
+    finally:
+        os.unlink(path)
