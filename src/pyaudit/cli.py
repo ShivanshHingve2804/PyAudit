@@ -10,6 +10,11 @@ import os
 
 from pyaudit import __version__
 from pyaudit.analyzer import analyze_path
+from pyaudit.baseline import (
+    filter_baseline_results,
+    load_baseline_fingerprints,
+    write_baseline,
+)
 from pyaudit.reporter import format_results, filter_results
 from pyaudit.models import Severity
 
@@ -36,7 +41,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     scan_parser.add_argument(
         "--format", "-f",
-        choices=["table", "json", "summary"],
+        choices=["table", "json", "summary", "sarif"],
         default="table",
         dest="output_format",
         help="Output format (default: table)",
@@ -58,6 +63,18 @@ def create_parser() -> argparse.ArgumentParser:
         default="",
         metavar="RULES",
         help="Comma-separated rule IDs to ignore (e.g. PA-C003,PA-B004)",
+    )
+
+    baseline_group = scan_parser.add_mutually_exclusive_group()
+    baseline_group.add_argument(
+        "--baseline",
+        metavar="PATH",
+        help="Suppress findings already present in a JSON baseline file",
+    )
+    baseline_group.add_argument(
+        "--write-baseline",
+        metavar="PATH",
+        help="Write current filtered findings to a JSON baseline and exit successfully",
     )
 
     # 'version' subcommand
@@ -91,7 +108,7 @@ def run_scan(args) -> int:
         if rule_id.strip()
     ]
 
-    # Format and print output
+    # Apply CLI filters before baseline comparison.
     filtered_results = filter_results(
         results,
         severity_filter=args.severity,
@@ -99,10 +116,38 @@ def run_scan(args) -> int:
         ignored_rules=set(ignored_rules),
     )
 
-    output = format_results(
-        filtered_results,
-        fmt=args.output_format,
-    )
+    if args.baseline:
+        try:
+            baseline_fingerprints = load_baseline_fingerprints(args.baseline)
+        except (OSError, ValueError, KeyError) as exc:
+            print(
+                f"\033[91mError: Could not read baseline '{args.baseline}': {exc}\033[0m",
+                file=sys.stderr,
+            )
+            return 2
+
+        filtered_results = filter_baseline_results(
+            filtered_results,
+            baseline_fingerprints,
+        )
+
+    if args.write_baseline:
+        try:
+            baseline_json = format_results(filtered_results, fmt="json")
+            write_baseline(args.write_baseline, baseline_json)
+        except OSError as exc:
+            print(
+                f"\033[91mError: Could not write baseline '{args.write_baseline}': {exc}\033[0m",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            f"Baseline written to {args.write_baseline}",
+            file=sys.stderr,
+        )
+
+    # Format and print output.
+    output = format_results(filtered_results, fmt=args.output_format)
     print(output)
 
     # Determine exit code
@@ -111,6 +156,8 @@ def run_scan(args) -> int:
         for result in filtered_results
         for issue in result.issues
     )
+    if args.write_baseline:
+        return 0
     return 1 if has_high else 0
 
 
