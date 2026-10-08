@@ -151,15 +151,34 @@ class StyleChecker(ast.NodeVisitor):
         return count
 
     def _count_returns(self, node: ast.FunctionDef) -> int:
-        """Count return statements in a function (not nested functions)."""
-        count = 0
-        for child in ast.walk(node):
-            if isinstance(child, ast.Return):
-                count += 1
-            # Don't count returns in nested functions
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child is not node:
-                continue
-        return count
+        """Count return statements in this function, excluding nested scopes."""
+
+        class ReturnCounter(ast.NodeVisitor):
+            def __init__(self):
+                self.count = 0
+
+            def visit_Return(self, current):
+                self.count += 1
+                self.generic_visit(current)
+
+            def visit_FunctionDef(self, current):
+                # Nested function has its own return scope.
+                return
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+
+            def visit_ClassDef(self, current):
+                # Methods defined inside a nested class have their own scopes.
+                return
+
+            def visit_Lambda(self, current):
+                # Lambda bodies cannot contain Return statements.
+                return
+
+        counter = ReturnCounter()
+        for statement in node.body:
+            counter.visit(statement)
+        return counter.count
 
     def _max_nesting_depth(self, body: list, current_depth: int) -> int:
         """Calculate the maximum nesting depth of control flow statements."""
