@@ -251,13 +251,17 @@ class BugDetector(ast.NodeVisitor):
                     self.visit(base)
                 for keyword in getattr(current, "keywords", []):
                     self.visit(keyword.value)
-                for default in current.args.defaults:
-                    self.visit(default)
-                for default in current.args.kw_defaults:
-                    if default is not None:
+                args = getattr(current, "args", None)
+                if args is not None:
+                    for default in args.defaults:
                         self.visit(default)
-                if current.returns is not None:
-                    self.visit(current.returns)
+                    for default in args.kw_defaults:
+                        if default is not None:
+                            self.visit(default)
+
+                returns = getattr(current, "returns", None)
+                if returns is not None:
+                    self.visit(returns)
 
                 nested = ScopeUsageVisitor()
                 for statement in current.body:
