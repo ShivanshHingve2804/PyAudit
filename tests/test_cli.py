@@ -76,3 +76,15 @@ def test_scan_ignore_rule():
         assert "PA-S001" not in result.stdout
     finally:
         os.unlink(path)
+
+
+def test_scan_high_severity_exit_respects_category_filter():
+    fd, path = tempfile.mkstemp(suffix=".py")
+    with os.fdopen(fd, "w") as f:
+        f.write("eval('1')\n")
+    try:
+        result = _run_pyaudit("scan", path, "--category", "bugs")
+        assert result.returncode == 0
+        assert "PA-S001" not in result.stdout
+    finally:
+        os.unlink(path)
