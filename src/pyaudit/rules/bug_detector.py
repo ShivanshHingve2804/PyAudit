@@ -11,6 +11,8 @@ Rules:
 """
 
 import ast
+from typing import Optional
+
 from pyaudit.models import Issue, Severity, Category
 
 # Built-in names that should not be shadowed
@@ -30,7 +32,7 @@ class BugDetector(ast.NodeVisitor):
     def __init__(self, filepath: str):
         self.filepath = filepath
         self.issues: list[Issue] = []
-        self._current_function: str | None = None
+        self._current_function: Optional[str] = None
         self._in_init = False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
