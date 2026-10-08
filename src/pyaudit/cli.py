@@ -10,7 +10,7 @@ import os
 
 from pyaudit import __version__
 from pyaudit.analyzer import analyze_path
-from pyaudit.reporter import format_results
+from pyaudit.reporter import format_results, filter_results
 from pyaudit.models import Severity
 
 
@@ -92,19 +92,23 @@ def run_scan(args) -> int:
     ]
 
     # Format and print output
-    output = format_results(
+    filtered_results = filter_results(
         results,
-        fmt=args.output_format,
         severity_filter=args.severity,
         category_filter=args.category,
-        ignored_rules=ignored_rules,
+        ignored_rules=set(ignored_rules),
+    )
+
+    output = format_results(
+        filtered_results,
+        fmt=args.output_format,
     )
     print(output)
 
     # Determine exit code
     has_high = any(
         issue.severity == Severity.HIGH
-        for result in results
+        for result in filtered_results
         for issue in result.issues
     )
     return 1 if has_high else 0
