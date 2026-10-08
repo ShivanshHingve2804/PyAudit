@@ -29,7 +29,7 @@ def format_results(
         Formatted string output.
     """
     # Apply filters
-    filtered_results = _apply_filters(
+    filtered_results = filter_results(
         results,
         severity_filter,
         category_filter,
@@ -90,7 +90,7 @@ def print_summary(results: list) -> str:
     return "\n".join(lines)
 
 
-def _apply_filters(
+def filter_results(
     results: list,
     severity_filter: str,
     category_filter: str,
