@@ -14,9 +14,17 @@ def _fingerprint_material(
     col: int,
     message: str,
 ) -> str:
-    normalized_path = os.path.normpath(
-        os.path.relpath(os.path.abspath(filepath), os.getcwd())
-    )
+    absolute_path = os.path.abspath(filepath)
+    try:
+        normalized_path = os.path.normpath(
+            os.path.relpath(absolute_path, os.getcwd())
+        )
+    except ValueError:
+        # Windows raises ValueError when the file and working directory are
+        # on different drives. Keep the absolute path in that case so
+        # fingerprint generation remains usable on CI runners.
+        normalized_path = os.path.normpath(absolute_path)
+
     return "\0".join([
         rule_id,
         normalized_path,
