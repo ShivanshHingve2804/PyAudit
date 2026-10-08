@@ -72,3 +72,16 @@ def test_normal_import():
     code = "from os import path"
     issues = _check_code(code)
     assert not any(i.rule_id == "PA-C006" for i in issues)
+
+
+def test_returns_in_nested_function_are_not_counted():
+    nested_returns = "
+".join(["        return 1"] * 6)
+    code = (
+        "def outer():\n"
+        "    def inner():\n"
+        + nested_returns
+        + "\n    return 1\n"
+    )
+    issues = _check_code(code)
+    assert not any(i.rule_id == "PA-C004" and "outer" in i.message for i in issues)
