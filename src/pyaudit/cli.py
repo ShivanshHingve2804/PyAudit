@@ -53,6 +53,12 @@ def create_parser() -> argparse.ArgumentParser:
         default="all",
         help="Filter issues by category (default: all)",
     )
+    scan_parser.add_argument(
+        "--ignore",
+        default="",
+        metavar="RULES",
+        help="Comma-separated rule IDs to ignore (e.g. PA-C003,PA-B004)",
+    )
 
     # 'version' subcommand
     subparsers.add_parser(
@@ -79,12 +85,19 @@ def run_scan(args) -> int:
     # Run analysis
     results = analyze_path(path)
 
+    ignored_rules = [
+        rule_id.strip()
+        for rule_id in args.ignore.split(",")
+        if rule_id.strip()
+    ]
+
     # Format and print output
     output = format_results(
         results,
         fmt=args.output_format,
         severity_filter=args.severity,
         category_filter=args.category,
+        ignored_rules=ignored_rules,
     )
     print(output)
 
