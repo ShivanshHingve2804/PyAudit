@@ -1,9 +1,13 @@
 """Output formatting for PyAudit analysis results.
 
-Supports three output formats: table (colored terminal), JSON, and summary.
+Supports four output formats: table (colored terminal), JSON, summary, and SARIF.
 """
 
 import json
+import os
+
+from pyaudit import __version__
+from pyaudit.baseline import issue_fingerprint
 from pyaudit.models import AnalysisResult, Issue, Severity, Category
 from pyaudit.utils import (
     RED, YELLOW, GREEN, CYAN, BOLD, DIM, RESET, WHITE,
@@ -16,6 +20,7 @@ def format_results(
     fmt: str = "table",
     severity_filter: str = "all",
     category_filter: str = "all",
+    ignored_rules: list | None = None,
 ) -> str:
     """Format analysis results into the specified output format.
 
@@ -38,6 +43,8 @@ def format_results(
 
     if fmt == "json":
         return _format_json(filtered_results)
+    elif fmt == "sarif":
+        return _format_sarif(filtered_results)
     elif fmt == "summary":
         return print_summary(filtered_results)
     else:
@@ -188,6 +195,7 @@ def _format_json(results: list) -> str:
                     "severity": issue.severity.value,
                     "category": issue.category.value,
                     "suggestion": issue.suggestion,
+                    "fingerprint": issue_fingerprint(issue),
                 }
                 for issue in result.issues
             ],
@@ -195,6 +203,79 @@ def _format_json(results: list) -> str:
         output["results"].append(file_data)
 
     return json.dumps(output, indent=2)
+
+
+def _format_sarif(results: list) -> str:
+    """Format findings as SARIF 2.1.0 for code-scanning integrations."""
+    rule_map = {}
+    sarif_results = []
+
+    level_map = {
+        Severity.HIGH: "error",
+        Severity.MEDIUM: "warning",
+        Severity.LOW: "note",
+    }
+
+    for result in results:
+        if result.error:
+            continue
+
+        for issue in result.issues:
+            rule_map.setdefault(issue.rule_id, {
+                "id": issue.rule_id,
+                "name": issue.rule_id,
+                "shortDescription": {"text": issue.message},
+                "defaultConfiguration": {
+                    "level": level_map[issue.severity],
+                },
+                "properties": {
+                    "category": issue.category.value,
+                },
+            })
+
+            result_data = {
+                "ruleId": issue.rule_id,
+                "level": level_map[issue.severity],
+                "message": {"text": issue.message},
+                "locations": [{
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": os.path.relpath(
+                                os.path.abspath(issue.filepath),
+                                os.getcwd(),
+                            ).replace(os.sep, "/"),
+                        },
+                        "region": {
+                            "startLine": max(1, issue.line),
+                            "startColumn": max(1, issue.col + 1),
+                        },
+                    }
+                }],
+                "partialFingerprints": {
+                    "pyaudit/v1": issue_fingerprint(issue),
+                },
+            }
+
+            if issue.suggestion:
+                result_data["properties"] = {"suggestion": issue.suggestion}
+
+            sarif_results.append(result_data)
+
+    payload = {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "PyAudit",
+                    "version": __version__,
+                    "rules": list(rule_map.values()),
+                }
+            },
+            "results": sarif_results,
+        }],
+    }
+    return json.dumps(payload, indent=2)
 
 
 def _get_summary_dict(results: list) -> dict:
