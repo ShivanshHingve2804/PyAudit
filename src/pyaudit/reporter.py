@@ -29,7 +29,12 @@ def format_results(
         Formatted string output.
     """
     # Apply filters
-    filtered_results = _apply_filters(results, severity_filter, category_filter)
+    filtered_results = _apply_filters(
+        results,
+        severity_filter,
+        category_filter,
+        set(ignored_rules or []),
+    )
 
     if fmt == "json":
         return _format_json(filtered_results)
@@ -85,9 +90,16 @@ def print_summary(results: list) -> str:
     return "\n".join(lines)
 
 
-def _apply_filters(results: list, severity_filter: str, category_filter: str) -> list:
+def _apply_filters(
+    results: list,
+    severity_filter: str,
+    category_filter: str,
+    ignored_rules: set[str] | None = None,
+) -> list:
     """Filter results by severity and/or category."""
-    if severity_filter == "all" and category_filter == "all":
+    ignored_rules = ignored_rules or set()
+
+    if severity_filter == "all" and category_filter == "all" and not ignored_rules:
         return results
 
     category_map = {
@@ -101,6 +113,8 @@ def _apply_filters(results: list, severity_filter: str, category_filter: str) ->
     for result in results:
         new_issues = []
         for issue in result.issues:
+            if issue.rule_id in ignored_rules:
+                continue
             if severity_filter != "all" and issue.severity.value != severity_filter:
                 continue
             if category_filter != "all":
