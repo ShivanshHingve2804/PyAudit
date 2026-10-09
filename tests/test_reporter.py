@@ -58,3 +58,15 @@ def test_empty_results():
     results = [AnalysisResult(filepath="clean.py", issues=[])]
     summary = print_summary(results)
     assert "No issues" in summary
+
+
+def test_sarif_uri_falls_back_when_path_is_on_another_drive(monkeypatch):
+    from pyaudit import reporter
+
+    def raise_cross_drive_error(path, start):
+        raise ValueError("paths are on different Windows drives")
+
+    monkeypatch.setattr(reporter.os.path, "relpath", raise_cross_drive_error)
+
+    uri = reporter._sarif_artifact_uri(__file__)
+    assert uri.startswith("file:")
