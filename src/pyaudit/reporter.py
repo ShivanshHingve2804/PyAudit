@@ -5,6 +5,7 @@ Supports four output formats: table (colored terminal), JSON, summary, and SARIF
 
 import json
 import os
+from pathlib import Path
 from typing import Optional, Set
 
 from pyaudit import __version__
@@ -59,7 +60,7 @@ def print_summary(results: list) -> str:
         results: List of AnalysisResult objects.
 
     Returns:
-        Summary string with counts.
+        Formatted string output.
     """
     all_issues = []
     errors = []
@@ -206,6 +207,21 @@ def _format_json(results: list) -> str:
     return json.dumps(output, indent=2)
 
 
+def _sarif_artifact_uri(filepath: str) -> str:
+    """Return a workspace-relative SARIF URI where possible.
+
+    On Windows, a file outside the current drive cannot be made relative to
+    the working directory. For that case, use a file URI for the absolute
+    path instead of allowing ValueError to break all SARIF output.
+    """
+    absolute_path = os.path.abspath(filepath)
+    try:
+        relative_path = os.path.relpath(absolute_path, os.getcwd())
+    except ValueError:
+        return Path(absolute_path).as_uri()
+    return relative_path.replace(os.sep, "/")
+
+
 def _format_sarif(results: list) -> str:
     """Format findings as SARIF 2.1.0 for code-scanning integrations."""
     rule_map = {}
@@ -241,10 +257,7 @@ def _format_sarif(results: list) -> str:
                 "locations": [{
                     "physicalLocation": {
                         "artifactLocation": {
-                            "uri": os.path.relpath(
-                                os.path.abspath(issue.filepath),
-                                os.getcwd(),
-                            ).replace(os.sep, "/"),
+                            "uri": _sarif_artifact_uri(issue.filepath),
                         },
                         "region": {
                             "startLine": max(1, issue.line),
